@@ -17,11 +17,41 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
+#include "content/nw/src/nw_package.h"
+#include "content/nw/src/shell_browser_main_parts.h"
+#include "content/nw/src/shell_content_browser_client.h"
+
 namespace platform_util {
 
 void ShowItemInFolder(const base::FilePath& full_path) {
   DCHECK([NSThread isMainThread]);
   NSString* path_string = base::SysUTF8ToNSString(full_path.value());
+
+  //change relative path to absolute path
+  if (!full_path.IsAbsolute()) {
+    content::ShellContentBrowserClient* browser_client =
+      static_cast<content::ShellContentBrowserClient*>(content::GetContentClient()->browser());
+    base::FilePath package_path = browser_client->shell_browser_main_parts()->package()->path();
+    std::vector<base::FilePath::StringType> components;
+    full_path.GetComponents(&components);
+    std::vector<base::FilePath::StringType>::const_iterator it = components.begin();
+    
+    for (; it != components.end(); ++it) {
+      const base::FilePath::StringType& component = *it;  
+      if (component == "~") {
+	package_path = full_path;
+	break;
+      }
+      else if (component == ".")
+	;//do nothing
+      else if (component == "..") 
+	package_path = package_path.DirName();
+      else
+	package_path = package_path.Append(component);
+    }
+    path_string = base::SysUTF8ToNSString(package_path.value());
+  }
+  
   if (!path_string || ![[NSWorkspace sharedWorkspace] selectFile:path_string
                                         inFileViewerRootedAtPath:nil])
     LOG(WARNING) << "NSWorkspace failed to select file " << full_path.value();
